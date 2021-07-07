@@ -10,7 +10,6 @@ logformat = '%(asctime)s:%(levelname)s:%(message)s'
 Logger.set_logger('gravity.log', logformat, 'INFO')
 logger = Logger.getlogger()
 
-
 G = constants.G.value
 EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
@@ -19,20 +18,18 @@ buffer_radius = 10.0
 grid = (75, 75)
 
 
-
 class Map:
     @classmethod
     def settings(cls, dimension, figsize):
         cls.fig, cls.ax = plt.subplots(figsize=figsize)
         cls.ax.set_xlim(-0.1*dimension, 1.1*dimension)
         cls.ax.set_ylim(-0.1*dimension, 1.1*dimension)
-        cls.fig.suptitle("with normal loop")
+        cls.fig.suptitle("vectorized")
 
     @classmethod
     def blip(cls):
         cls.fig.canvas.draw()
         cls.fig.canvas.flush_events()
-
 
 
 class MassObject(Map):
@@ -57,60 +54,51 @@ class MassObject(Map):
     def on_motion(self, event):
         if not self.current_dragging:
             return
-
         self.location = Point(event.xdata, event.ydata)
         self.body.center = (self.location.x, self.location.y)
+        self.cvf.field.remove()
+        self.cvf.plot_vectorfield()
         self.blip()
 
     def on_release(self, event):
-        self.cvf.field.remove()
-        self.cvf.plot_vectorfield()
+        # self.cvf.field.remove()
+        # self.cvf.plot_vectorfield()
         self.current_dragging = False
         self.blip()
 
     def grav_vec(self, x, y, buffer_radius):
-        ''' method that returns a tuple of the gravity vector at location
+        ''' method that returns a tuple of the gravity vector at meshgrid
             (x, y) due to the MassObject
         '''
-        dx = (x - self.location.x)
-        dy = (y - self.location.y)
-        radius = np.sqrt(dx*dx + dy*dy)
-        if radius < buffer_radius * self.radius:
-            return np.nan, np.nan
-
-        angle = np.arctan2(dy, dx)
-        force = - G * self.mass / (radius * radius)
-        return force * np.cos(angle), force * np.sin(angle)
+        min_radius_2 = (self.radius * buffer_radius)**2
+        dx = x - self.location.x
+        dy = y - self.location.y
+        dx, dy = np.meshgrid(dx, dy)
+        radius = dx*dx + dy*dy
+        dx = np.where(radius > min_radius_2, dx, np.nan)
+        dy = np.where(radius > min_radius_2, dy, np.nan)
+        force = - G * self.mass * radius**(-1.5)
+        return force * dx, force * dy
 
 
 class VectorField(Map):
     def __init__(self, x, y, vector_fields):
         self.vector_fields = vector_fields
-        self.x_vals = x
-        self.y_vals = y
+        self.x = x
+        self.y = y
 
-    @timed(logger)
+    # @timed(logger)
     def plot_vectorfield(self):
-        u = [0 for _ in range(len(self.y_vals)*len(self.x_vals))]
-        v = u.copy()
+        x, y = np.meshgrid(self.x, self.y)
+        u = np.zeros((len(self.x), 1))
+        v = np.zeros((len(self.y), 1))
+        u, v = np.meshgrid(u, v)
+
         for vector_field in self.vector_fields:
-            index = 0
-            for y in self.y_vals:
-                for x in self.x_vals:
-                    vector = vector_field(x, y, buffer_radius)
-                    if np.isnan(vector[0]):
-                        u[index] = np.nan
-                        v[index] = np.nan
+            _u, _v = vector_field(self.x, self.y, buffer_radius)
+            u += _u
+            v += _v
 
-                    else:
-                        u[index] += vector[0]
-                        v[index] += vector[1]
-
-                    index += 1
-
-        u = np.array(u)
-        v = np.array(v)
-        x, y = np.meshgrid(self.x_vals, self.y_vals)
         self.field = self.ax.quiver(x, y, u, v, scale=2)
 
 
@@ -129,7 +117,7 @@ def main():
         2.0*EARTH_MASS, dimension*0.6, dimension*0.2, 1.4*EARTH_RADIUS, color='green')
 
     # create one common vector field and pass to each of the mass objects
-    cvf = VectorField(x_vals, y_vals, [mars.grav_vec, earth.grav_vec, jupiter.grav_vec])
+    cvf = VectorField(x_vals, y_vals, [earth.grav_vec, mars.grav_vec, jupiter.grav_vec])
     earth.cvf = cvf
     mars.cvf = cvf
     jupiter.cvf = cvf
