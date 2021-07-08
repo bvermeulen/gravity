@@ -15,7 +15,7 @@ EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
 AU = constants.au.value
 buffer_radius = 10.0
-grid = (75, 75)
+grid = (100, 100)
 
 
 class Map:
@@ -67,7 +67,7 @@ class MassObject(Map):
         self.blip()
 
     def grav_vec(self, x, y, buffer_radius):
-        ''' method that returns a tuple of the gravity vector at meshgrid
+        ''' method that returns a tuple of the gravity vectors at meshgrid
             (x, y) due to the MassObject
         '''
         min_radius_2 = (self.radius * buffer_radius)**2
@@ -87,7 +87,7 @@ class VectorField(Map):
         self.x = x
         self.y = y
 
-    # @timed(logger)
+    @timed(logger)
     def plot_vectorfield(self):
         x, y = np.meshgrid(self.x, self.y)
         u = np.zeros((len(self.x), 1))
@@ -104,8 +104,6 @@ class VectorField(Map):
 
 def main():
     dimension = AU / 200
-    x_vals = np.linspace(0, dimension, grid[0])
-    y_vals = np.linspace(0, dimension, grid[1])
     solar_map = Map()
     solar_map.settings(dimension, (10,10))
 
@@ -116,7 +114,10 @@ def main():
     jupiter = MassObject(
         2.0*EARTH_MASS, dimension*0.6, dimension*0.2, 1.4*EARTH_RADIUS, color='green')
 
-    # create one common vector field and pass to each of the mass objects
+    # create one common vector field instance and pass this to each of the mass objects,
+    # so if a method of cvf is called from any of the mass objects the result will be the same
+    x_vals = np.linspace(0, dimension, grid[0])
+    y_vals = np.linspace(0, dimension, grid[1])
     cvf = VectorField(x_vals, y_vals, [earth.grav_vec, mars.grav_vec, jupiter.grav_vec])
     earth.cvf = cvf
     mars.cvf = cvf
