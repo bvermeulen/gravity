@@ -1,21 +1,15 @@
-# gravity
+import time
 import numpy as np
 from astropy import constants
 import matplotlib.pyplot as plt
 from matplotlib import patches as mpl_patches
 from shapely.geometry import Point
-from Utils.plogger import Logger, timed
-
-logformat = '%(asctime)s:%(levelname)s:%(message)s'
-Logger.set_logger('gravity.log', logformat, 'INFO')
-logger = Logger.getlogger()
 
 G = constants.G.value
 EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
 AU = constants.au.value
 buffer_radius = 10.0
-grid = (60, 60)
 
 
 class Map:
@@ -24,12 +18,12 @@ class Map:
         cls.fig, cls.ax = plt.subplots(figsize=figsize)
         cls.ax.set_xlim(-0.1*dimension, 1.1*dimension)
         cls.ax.set_ylim(-0.1*dimension, 1.1*dimension)
-        cls.fig.suptitle("vectorized")
 
     @classmethod
     def blip(cls):
         cls.fig.canvas.draw()
         cls.fig.canvas.flush_events()
+
 
 
 class MassObject(Map):
@@ -54,56 +48,79 @@ class MassObject(Map):
     def on_motion(self, event):
         if not self.current_dragging:
             return
+
         self.location = Point(event.xdata, event.ydata)
         self.body.center = (self.location.x, self.location.y)
-        self.cvf.field.remove()
-        self.cvf.plot_vectorfield()
         self.blip()
 
     def on_release(self, event):
-        # self.cvf.field.remove()
-        # self.cvf.plot_vectorfield()
+        self.cvf.field.remove()
+        self.cvf.plot_vectorfield()
         self.current_dragging = False
         self.blip()
 
     def grav_vec(self, x, y, buffer_radius):
-        ''' method that returns a tuple of the gravity vectors at meshgrid
+        ''' method that returns a tuple of the gravity vector at location
             (x, y) due to the MassObject
         '''
-        min_radius_2 = (self.radius * buffer_radius)**2
-        dx = x - self.location.x
-        dy = y - self.location.y
-        dx, dy = np.meshgrid(dx, dy)
-        radius = dx*dx + dy*dy
-        dx = np.where(radius > min_radius_2, dx, np.nan)
-        dy = np.where(radius > min_radius_2, dy, np.nan)
-        force = - G * self.mass * radius**(-1.5)
-        return force * dx, force * dy
+        dx = (x - self.location.x)
+        dy = (y - self.location.y)
+        radius = np.sqrt(dx*dx + dy*dy)
+        if radius < buffer_radius * self.radius:
+            return np.nan, np.nan
+
+        angle = np.arctan2(dy, dx)
+        force = - G * self.mass / (radius * radius)
+        return force * np.cos(angle), force * np.sin(angle)
 
 
-class VectorField(Map):
+class Animation(Map):
     def __init__(self, x, y, vector_fields):
         self.vector_fields = vector_fields
-        self.x = x
-        self.y = y
+        self.x_vals = x
+        self.y_vals = y
+        self.fig.canvas.mpl_connect('button_press_event', self.evolve)
+        self.evolve_on = False
 
-    @timed(logger)
     def plot_vectorfield(self):
-        x, y = np.meshgrid(self.x, self.y)
-        u = np.zeros((len(self.x), 1))
-        v = np.zeros((len(self.y), 1))
-        u, v = np.meshgrid(u, v)
-
+        u = [0 for _ in range(len(self.y_vals)*len(self.x_vals))]
+        v = u.copy()
         for vector_field in self.vector_fields:
-            _u, _v = vector_field(self.x, self.y, buffer_radius)
-            u += _u
-            v += _v
+            index = 0
+            for y in self.y_vals:
+                for x in self.x_vals:
+                    vector = vector_field(x, y, buffer_radius)
+                    if np.isnan(vector[0]):
+                        u[index] = np.nan
+                        v[index] = np.nan
 
+                    else:
+                        u[index] += vector[0]
+                        v[index] += vector[1]
+
+                    index += 1
+
+        u = np.array(u)
+        v = np.array(v)
+        x, y = np.meshgrid(self.x_vals, self.y_vals)
         self.field = self.ax.quiver(x, y, u, v, scale=2)
+
+    def evolve(self, event):
+        if not event.dblclick:
+            return
+
+        self.evolve_on = not self.evolve_on
+        print(self.evolve_on)
+        while self.evolve_on:
+            print('in loop ...')
+            time.sleep(1)
+            self.blip()
 
 
 def main():
     dimension = AU / 200
+    x_vals = np.linspace(0, dimension, 39)
+    y_vals = np.linspace(0, dimension, 39)
     solar_map = Map()
     solar_map.settings(dimension, (10,10))
 
@@ -114,11 +131,8 @@ def main():
     jupiter = MassObject(
         2.0*EARTH_MASS, dimension*0.6, dimension*0.2, 1.4*EARTH_RADIUS, color='green')
 
-    # create one common vector field instance and pass this to each of the mass objects,
-    # so if a method of cvf is called from any of the mass objects the result will be the same
-    x_vals = np.linspace(0, dimension, grid[0])
-    y_vals = np.linspace(0, dimension, grid[1])
-    cvf = VectorField(x_vals, y_vals, [earth.grav_vec, mars.grav_vec, jupiter.grav_vec])
+    # create one common vector field and pass to each of the mass objects
+    cvf = Animation(x_vals, y_vals, [mars.grav_vec, earth.grav_vec, jupiter.grav_vec])
     earth.cvf = cvf
     mars.cvf = cvf
     jupiter.cvf = cvf
