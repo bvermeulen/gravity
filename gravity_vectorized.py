@@ -1,5 +1,4 @@
 # gravity
-import time
 import numpy as np
 from astropy import constants
 import matplotlib.pyplot as plt
@@ -15,17 +14,20 @@ G = constants.G.value
 EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
 AU = constants.au.value
-buffer_radius = 12.0
+earth_moon = 384_399_000
+buffer_radius = 4.0
 grid = (50, 50)
+grid = (1, 1) # no vector field shown
+magnification = 300  # other the planets get really small
 
 
 class Map:
     @classmethod
-    def settings(cls, dimension, figsize):
+    def settings(cls, dimension, title, figsize):
         cls.fig, cls.ax = plt.subplots(figsize=figsize)
         cls.ax.set_xlim(-1.1*dimension, 1.1*dimension)
         cls.ax.set_ylim(-1.1*dimension, 1.1*dimension)
-        cls.fig.suptitle("vectorized")
+        cls.fig.suptitle(title)
 
     @classmethod
     @timed(logger)
@@ -139,17 +141,14 @@ class Animation(Map):
         self.evolve_on = not self.evolve_on
 
         # initiate the matrices
-        pos = []
-        vel = []
-        mass = []
+        pos = np.empty((0, 2), np.float64)
+        vel = np.empty((0, 2), np.float64)
+        mass = np.empty((0, 1), np.float64)
         for mass_object in self.mass_objects:
-            pos.append([mass_object.location.x, mass_object.location.y])
-            vel.append([mass_object.velocity.x, mass_object.velocity.y])
-            mass.append([mass_object.mass])
+            pos = np.append(pos,[[mass_object.location.x, mass_object.location.y]], axis=0)
+            vel = np.append(vel, [[mass_object.velocity.x, mass_object.velocity.y]], axis=0)
+            mass = np.append(mass, [[mass_object.mass]], axis=0)
 
-        pos = np.array(pos)
-        vel = np.array(vel)
-        mass = np.array(mass)
         acc = self.get_acc(pos, mass, 0.01 * EARTH_RADIUS)
         dt = 1000
         t = 0
@@ -209,23 +208,16 @@ class Animation(Map):
         return np.hstack((ax, ay))
 
 
-def main():
-    dimension = AU / 200
-    earth_moon = 384_399_000  # distance earth_moon
+def main_moon():
     dimension = 1.5 * earth_moon
     solar_map = Map()
-    solar_map.settings(dimension, (10,10))
+    solar_map.settings(dimension, 'Earth - moon', (10,10))
 
     earth = MassObject(
         EARTH_MASS, 0.0, 0.0, +0.0, +0.0, EARTH_RADIUS, color='blue')
     moon = MassObject(
         EARTH_MASS*0.0123, -earth_moon, 0.0, +0.0, -1022, 0.2725*EARTH_RADIUS, color='orange'
     )
-    # mars = MassObject(
-    #     0.1*EARTH_MASS, dimension*0.2, dimension*0.7, +0, -2_000, 0.75*EARTH_RADIUS, color='red')
-    # jupiter = MassObject(
-    #     2.0*EARTH_MASS, dimension*0.6, dimension*0.2, 0, 0, 1.4*EARTH_RADIUS, color='green')
-
     # create one common vector field instance and pass this to each of the mass objects,
     # so if a method of cvf is called from any of the mass objects the result will be the same
     x_vals = np.linspace(-dimension, dimension, grid[0])
@@ -233,11 +225,47 @@ def main():
     common_animator = Animation(x_vals, y_vals, [earth, moon])
     earth.animator = common_animator
     moon.animator = common_animator
-    #.animator = common_animator
-    # jupiter.animator = common_animator
+    common_animator.plot_vectorfield()
+    plt.show()
+
+
+def main_solar():
+    dimension = AU * 2
+    solar_map = Map()
+    solar_map.settings(dimension, 'Solar System - Mercury, Venus, Earth (Moon), Mars', (10,10))
+    sun = MassObject(
+        333_000*EARTH_MASS, 0.0, 0.0, +0.0, +0.0,
+        15*109*EARTH_RADIUS, color='yellow')
+    mercury = MassObject(
+        0.055*EARTH_MASS, -0.466697*AU, 0.0, +0.0, -38_860.0,
+        magnification*0.3829*EARTH_RADIUS, color='purple')       # at the aphelion
+    venus = MassObject(
+        0.815*EARTH_MASS, -0.723332*AU, 0.0, +0.0, -35_020.0,
+        magnification*0.902*EARTH_RADIUS, color='brown')
+    earth = MassObject(
+        EARTH_MASS, -AU, 0.0, +0.0, -29_780.0,
+        magnification*EARTH_RADIUS, color='blue')
+    moon = MassObject(
+        0.0123*EARTH_MASS, -(AU + earth_moon), 0.0, +0.0, -(29_780.0+1_022.0),
+        2*magnification*0.2725*EARTH_RADIUS, color='orange')
+    mars = MassObject(
+        0.107*EARTH_MASS, -1.523679*AU, 0.0, +0.0, -24_007.0,
+        magnification*0.5333*EARTH_RADIUS, color='red')
+
+    # create one common vector field instance and pass this to each of the mass objects,
+    # so if a method of cvf is called from any of the mass objects the result will be the same
+    x_vals = np.linspace(-dimension, dimension, grid[0])
+    y_vals = np.linspace(-dimension, dimension, grid[1])
+    common_animator = Animation(x_vals, y_vals, [sun, mercury, venus, earth, moon, mars])
+    sun.animator = common_animator
+    mercury.animator = common_animator
+    venus.animator = common_animator
+    earth.animator = common_animator
+    moon.animator = common_animator
+    mars.animator = common_animator
     common_animator.plot_vectorfield()
     plt.show()
 
 
 if __name__ == '__main__':
-    main()
+    main_solar()
