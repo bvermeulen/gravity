@@ -15,7 +15,7 @@ EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
 AU = constants.au.value
 earth_moon = 384_399_000
-buffer_radius = 4.0
+buffer_radius = 4.0   # for solar system use 4.0, for moon use 13.0
 grid = (50, 50)
 grid = (1, 1) # no vector field shown
 magnification = 300  # other the planets get really small
@@ -172,6 +172,7 @@ class Animation(Map):
             # update time
             t += dt
 
+            # use 20_000 for solar system, 10_000 for moon
             if t % 20_000 == 0:
                 self.update_status(pos, vel)
                 self.field.remove()
@@ -230,7 +231,7 @@ def main_moon():
 
 
 def main_solar():
-    dimension = AU * 2
+    dimension = AU*2
     solar_map = Map()
     solar_map.settings(dimension, 'Solar System - Mercury, Venus, Earth (Moon), Mars', (10,10))
     sun = MassObject(
