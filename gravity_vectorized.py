@@ -1,6 +1,5 @@
 # gravity
 from __future__ import annotations
-import typing
 import numpy as np
 from astropy import constants
 import matplotlib as mpl
@@ -30,7 +29,7 @@ class Map:
     ax:  mpl.axes.Axes
 
     @classmethod
-    def settings(cls, dimension: float, title: str, figsize: typing.Tuple[float, float]):
+    def settings(cls, dimension: float, title: str, figsize: tuple[float, float]):
         cls.fig, cls.ax = plt.subplots(figsize=figsize)
         cls.ax.set_xlim(-1.1*dimension, 1.1*dimension)
         cls.ax.set_ylim(-1.1*dimension, 1.1*dimension)
@@ -103,7 +102,7 @@ class MassObject(Map):
         self.current_dragging = False
         self.blip()
 
-    def gravity_field(self, x: list[float], y: list[float], buffer_radius: float) -> tuple[np.ndarray, np.ndarray]:
+    def gravity_field(self, x: np.ndarray, y: np.ndarray, buffer_radius: float) -> tuple[np.ndarray, np.ndarray]:
         ''' method that returns a tuple of the gravity vectors at meshgrid
             (x, y) due to the MassObject
         '''
@@ -120,7 +119,7 @@ class MassObject(Map):
 
 class Animation(Map):
 
-    def __init__(self, x: list[float], y: list[float], mass_objects: list[MassObject]):
+    def __init__(self, x: np.ndarray, y: np.ndarray, mass_objects: list[MassObject]):
         self.mass_objects = mass_objects
         self.x = x
         self.y = y
