@@ -1,10 +1,14 @@
 # gravity
+from __future__ import annotations
+import typing
 import numpy as np
 from astropy import constants
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import patches as mpl_patches
 from shapely.geometry import Point
 from Utils.plogger import Logger, timed
+
 
 logformat = '%(asctime)s:%(levelname)s:%(message)s'
 Logger.set_logger('gravity.log', logformat, 'INFO')
@@ -17,13 +21,16 @@ AU = constants.au.value
 earth_moon = 384_399_000
 buffer_radius = 4.0   # for solar system use 4.0, for moon use 13.0
 grid = (50, 50)
-grid = (1, 1) # no vector field shown
+grid = (0, 0) # no vector field shown
 magnification = 300  # other the planets get really small
-
+softening = 0.01 * EARTH_RADIUS
 
 class Map:
+    fig: mpl.figure.Figure
+    ax:  mpl.axes.Axes
+
     @classmethod
-    def settings(cls, dimension, title, figsize):
+    def settings(cls, dimension: float, title: str, figsize: typing.Tuple[float, float]):
         cls.fig, cls.ax = plt.subplots(figsize=figsize)
         cls.ax.set_xlim(-1.1*dimension, 1.1*dimension)
         cls.ax.set_ylim(-1.1*dimension, 1.1*dimension)
@@ -37,7 +44,7 @@ class Map:
 
 
 class MassObject(Map):
-    def __init__(self, mass, x, y, vx, vy, radius, color='black'):
+    def __init__(self, mass: float, x: float, y: float, vx: float, vy: float, radius: float, color: str='black'):
         self._mass = mass
         self._location = Point(x, y)
         self._velocity = Point(vx, vy)
@@ -49,55 +56,54 @@ class MassObject(Map):
         cv_body.mpl_connect('motion_notify_event', self.on_motion)
         cv_body.mpl_connect('button_release_event', self.on_release)
         self.current_dragging = False
-        self._animator = None
+        self._animator: Animation
 
     @property
-    def location(self):
+    def location(self) -> Point:
         return self._location
 
     @location.setter
-    def location(self, p):
+    def location(self, p: tuple[float, float]):
         self._location = Point(p[0], p[1])
         self._body.center = (self.location.x, self.location.y)
 
     @property
-    def velocity(self):
+    def velocity(self) -> Point:
         return self._velocity
 
     @velocity.setter
-    def velocity(self, vel):
+    def velocity(self, vel: tuple[float, float]):
         self._velocity = Point(vel[0], vel[1])
 
     @property
-    def mass(self):
+    def mass(self) -> float:
         return self._mass
 
     @property
-    def animator(self):
+    def animator(self) -> Animation:
         return self._animator
 
     @animator.setter
-    def animator(self, animator_instance):
+    def animator(self, animator_instance: Animation):
         self._animator = animator_instance
 
-    def on_pick(self, event):
+    def on_pick(self, event: mpl.backend_bases):
         if event.artist != self._body:
             return
         self.current_dragging = True
 
-    def on_motion(self, event):
+    def on_motion(self, event: mpl.backend_bases):
         if not self.current_dragging:
             return
         self.location = (event.xdata, event.ydata)
-        self._animator.field.remove()
         self._animator.plot_vectorfield()
         self.blip()
 
-    def on_release(self, event):
+    def on_release(self, _):
         self.current_dragging = False
         self.blip()
 
-    def gravity_field(self, x, y, buffer_radius):
+    def gravity_field(self, x: list[float], y: list[float], buffer_radius: float) -> tuple[np.ndarray, np.ndarray]:
         ''' method that returns a tuple of the gravity vectors at meshgrid
             (x, y) due to the MassObject
         '''
@@ -113,15 +119,26 @@ class MassObject(Map):
 
 
 class Animation(Map):
-    def __init__(self, x, y, mass_objects):
+
+    def __init__(self, x: list[float], y: list[float], mass_objects: list[MassObject]):
         self.mass_objects = mass_objects
         self.x = x
         self.y = y
         self.fig.canvas.mpl_connect('button_press_event', self.evolve)
         self.evolve_on = False
+        self.field: mpl.Axes.axes = None
 
     # @timed(logger)
-    def plot_vectorfield(self):
+    def plot_vectorfield(self) -> None:
+        if len(self.x) < 2 and len(self.y) < 2:
+            return
+
+        try:
+            self.field.remove()
+
+        except AttributeError:
+            pass
+
         x, y = np.meshgrid(self.x, self.y)
         u = np.zeros((len(self.x), 1))
         v = np.zeros((len(self.y), 1))
@@ -134,7 +151,7 @@ class Animation(Map):
 
         self.field = self.ax.quiver(x, y, u, v, scale=2)
 
-    def evolve(self, event):
+    def evolve(self, event: mpl.backend_bases) -> None:
         if not event.dblclick:
             return
 
@@ -149,7 +166,7 @@ class Animation(Map):
             vel = np.append(vel, [[mass_object.velocity.x, mass_object.velocity.y]], axis=0)
             mass = np.append(mass, [[mass_object.mass]], axis=0)
 
-        acc = self.get_acc(pos, mass, 0.01 * EARTH_RADIUS)
+        acc = self.get_acc(pos, mass, softening)
         dt = 1000
         t = 0
 
@@ -157,41 +174,32 @@ class Animation(Map):
             if t % 50_000 == 0:
                 print(f'time: {t/3600/24:8.1f} days              ', end='\r')
 
-            # (1/2) kick
-            vel += acc * dt*0.5
-
-            # drift
+            # (1/2) kick method
+            vel += acc * dt * 0.5
             pos += vel * dt
-
-            #update acceleration
-            acc = self.get_acc(pos, mass, EARTH_RADIUS)
-
-            # (1/2) kick
-            vel += acc * dt*0.5
-
-            # update time
+            acc = self.get_acc(pos, mass, softening)
+            vel += acc * dt * 0.5
             t += dt
 
             # use 20_000 for solar system, 10_000 for moon
             if t % 20_000 == 0:
                 self.update_status(pos, vel)
-                self.field.remove()
                 self.plot_vectorfield()
                 self.blip()
 
-    def update_status(self, pos, vel):
+    def update_status(self, pos: np.ndarray, vel: np.ndarray):
         for index, mass_object in enumerate(self.mass_objects):
             mass_object.location = (pos[index][0], pos[index][1])
             mass_object.velocity = (vel[index][0], vel[index][1])
 
     @staticmethod
-    def get_acc(pos, mass, softening):
+    def get_acc(pos: np.ndarray, mass: np.ndarray, softening: float) -> np.ndarray:
         '''
         Calculate the acceleration on each particle due to Newton's Law
-        pos  is an N x 3 matrix of positions of mass_objects
+        pos  is an N x 2 matrix of positions of mass_objects
         mass is an N x 1 vector of mass_objects
         softening is the softening length
-        a is N x 3 matrix of accelerations
+        return:  N x 2 matrix of accelerations
         see: https://medium.com/swlh/create-your-own-n-body-simulation-with-python-f417234885e9
         '''
         # positions r = [x, y] for all mass_objects
@@ -207,6 +215,7 @@ class Animation(Map):
         ax = G * (dx * inv_r3) @ mass
         ay = G * (dy * inv_r3) @ mass
         return np.hstack((ax, ay))
+
 
 
 def main_moon():
@@ -231,9 +240,9 @@ def main_moon():
 
 
 def main_solar():
-    dimension = AU*2
+    dimension = 2 * AU
     solar_map = Map()
-    solar_map.settings(dimension, 'Solar System - Mercury, Venus, Earth (Moon), Mars', (10,10))
+    solar_map.settings(dimension, 'Solar System - Mercury, Venus, Earth (Moon), Mars', (10, 10))
     sun = MassObject(
         333_000*EARTH_MASS, 0.0, 0.0, +0.0, +0.0,
         15*109*EARTH_RADIUS, color='yellow')
