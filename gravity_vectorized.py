@@ -5,6 +5,9 @@ from astropy import constants
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import patches as mpl_patches
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.widgets import TextBox, Button
+from PIL import Image
 from shapely.geometry import Point
 from Utils.plogger import Logger, timed
 
@@ -18,11 +21,14 @@ EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
 AU = constants.au.value
 earth_moon = 384_399_000
-buffer_radius = 4.0   # for solar system use 4.0, for moon use 13.0
+buffer_radius = 10.0   # for solar system use 4.0, for moon use 13.0
 grid = (50, 50)
 grid = (0, 0) # no vector field shown
 magnification = 300  # other the planets get really small
-softening = 0.01 * EARTH_RADIUS
+softening = 0.0000001 * EARTH_RADIUS
+rocket_sprite_file = 'rocket_sprite2.png'
+degrad = np.pi / 180.0
+
 
 class Map:
     fig: mpl.figure.Figure
@@ -37,13 +43,16 @@ class Map:
 
     @classmethod
     @timed(logger)
-    def blip(cls):
+    def blit(cls):
         cls.fig.canvas.draw()
         cls.fig.canvas.flush_events()
 
 
 class MassObject(Map):
-    def __init__(self, mass: float, x: float, y: float, vx: float, vy: float, radius: float, color: str='black'):
+    def __init__(
+        self, mass: float, x: float, y: float, vx: float, vy: float,
+        radius: float, color: str='black'
+        ):
         self._mass = mass
         self._location = Point(x, y)
         self._velocity = Point(vx, vy)
@@ -96,11 +105,11 @@ class MassObject(Map):
             return
         self.location = (event.xdata, event.ydata)
         self._animator.plot_vectorfield()
-        self.blip()
+        self.blit()
 
     def on_release(self, _):
         self.current_dragging = False
-        self.blip()
+        self.blit()
 
     def gravity_field(self, x: np.ndarray, y: np.ndarray, buffer_radius: float) -> tuple[np.ndarray, np.ndarray]:
         ''' method that returns a tuple of the gravity vectors at meshgrid
@@ -117,15 +126,111 @@ class MassObject(Map):
         return force * dx, force * dy
 
 
+class Rocket(Map):
+
+    rocket_sprite = Image.open(rocket_sprite_file)
+
+    def __init__(self, mass: float, x: float, y: float, velocity: float,
+                 alignment: float):
+        self._mass = mass
+        self._location = Point(x, y)
+        self._velocity = Point(0.0, 0.0)
+        self._alignment = alignment
+        self.on_delta_v(velocity)
+        self.on_go(None)
+        self.rocket = None
+        self.add_controls()
+        self.update_sprite()
+
+        self.velocitybox.on_submit(self.on_delta_v)
+        self.go_button.on_clicked(self.on_go)
+        self.fig.canvas.mpl_connect('key_press_event', self.on_key)
+
+    @property
+    def mass(self):
+        return self._mass
+
+    @property
+    def location(self):
+        return self._location
+
+    @location.setter
+    def location(self, p: tuple[float, float]):
+        self._location = Point(p[0], p[1])
+        self.update_sprite()
+
+    @property
+    def velocity(self):
+        return self._velocity
+
+    @velocity.setter
+    def velocity(self, vel: tuple[float, float]):
+        self._velocity = Point(vel[0], vel[1])
+
+    def add_controls(self):
+        ax_velocitybox = self.fig.add_axes([0.20, 0.05, 0.075, 0.03])
+        self.velocitybox = TextBox(ax_velocitybox, 'Delta V:  ')
+        self.velocitybox.set_val('+0.0')
+        ax_go_button = self.fig.add_axes([0.30, 0.05, 0.05, 0.03])
+        self.go_button = Button(ax_go_button, 'GO')
+        ax_status_box = self.fig.add_axes([0.38, 0.05, 0.40, 0.03])
+        self.statusbox = TextBox(ax_status_box, '')
+        self.statusbox.set_val('velocity: 100, delta v: 20%, burn: on')
+
+    def update_sprite(self):
+        try:
+            self.rocket.remove()
+
+        except AttributeError:
+            pass
+
+        im = OffsetImage(
+            self.rocket_sprite.rotate(-self._alignment), zoom=0.015
+        )
+        rocket_im = AnnotationBbox(
+            im, (self._location.x, self._location.y), frameon=False
+        )
+        self.rocket = self.ax.add_artist(rocket_im)
+        vel = (self.velocity.x * self.velocity.x + self.velocity.y * self.velocity.y)**0.5
+        self.statusbox.set_val(f'velocity: {vel:,.0f}')
+
+    def on_key(self, event):
+        if event.key == 'right':
+            self.rotate(1)
+
+        elif event.key == 'left':
+            self.rotate(-1)
+
+    def rotate(self, direction: int):
+        self._alignment += 4 * direction
+        self.update_sprite()
+        self.blit()
+
+    def on_delta_v(self, delta_v):
+        self._velocity_delta = Point(
+            np.sin(self._alignment*degrad) * float(delta_v),
+            np.cos(self._alignment*degrad) * float(delta_v)
+        )
+        print(f'delta v: {self._velocity_delta}')
+
+    def on_go(self, _):
+        new_vel_x = self._velocity.x + self._velocity_delta.x
+        new_vel_y = self._velocity.y + self._velocity_delta.y
+        self._velocity = Point(new_vel_x, new_vel_y)
+        print(f'velocity: {self.velocity}')
+
+
 class Animation(Map):
 
-    def __init__(self, x: np.ndarray, y: np.ndarray, mass_objects: list[MassObject]):
+    def __init__(self, x: np.ndarray, y: np.ndarray,
+                 mass_objects: list[MassObject], rocket: Rocket=None):
         self.mass_objects = mass_objects
         self.x = x
         self.y = y
         self.fig.canvas.mpl_connect('button_press_event', self.evolve)
         self.evolve_on = False
         self.field: mpl.Axes.axes = None
+        self.rocket = rocket
 
     # @timed(logger)
     def plot_vectorfield(self) -> None:
@@ -165,12 +270,17 @@ class Animation(Map):
             vel = np.append(vel, [[mass_object.velocity.x, mass_object.velocity.y]], axis=0)
             mass = np.append(mass, [[mass_object.mass]], axis=0)
 
+        if self.rocket:
+            pos = np.append(pos, [[self.rocket.location.x, self.rocket.location.y]], axis=0)
+            vel = np.append(vel, [[self.rocket.velocity.x, self.rocket.velocity.y]], axis=0)
+            mass = np.append(mass, [[self.rocket.mass]], axis=0)
+
         acc = self.get_acc(pos, mass, softening)
-        dt = 1000
+        dt = 1
         t = 0
 
         while self.evolve_on:
-            if t % 50_000 == 0:
+            if t % 21_600 == 0:
                 print(f'time: {t/3600/24:8.1f} days              ', end='\r')
 
             # (1/2) kick method
@@ -181,15 +291,20 @@ class Animation(Map):
             t += dt
 
             # use 20_000 for solar system, 10_000 for moon
-            if t % 20_000 == 0:
+            if t % 1_000 == 0:
                 self.update_status(pos, vel)
                 self.plot_vectorfield()
-                self.blip()
+                self.blit()
 
     def update_status(self, pos: np.ndarray, vel: np.ndarray):
+        index = 0
         for index, mass_object in enumerate(self.mass_objects):
             mass_object.location = (pos[index][0], pos[index][1])
             mass_object.velocity = (vel[index][0], vel[index][1])
+
+        if self.rocket:
+            self.rocket.location = (pos[index+1][0], pos[index+1][1])
+            self.rocket.velocity = (vel[index+1][0], vel[index+1][1])
 
     @staticmethod
     def get_acc(pos: np.ndarray, mass: np.ndarray, softening: float) -> np.ndarray:
@@ -216,7 +331,6 @@ class Animation(Map):
         return np.hstack((ax, ay))
 
 
-
 def main_moon():
     dimension = 1.5 * earth_moon
     solar_map = Map()
@@ -225,8 +339,10 @@ def main_moon():
     earth = MassObject(
         EARTH_MASS, 0.0, 0.0, +0.0, +0.0, EARTH_RADIUS, color='blue')
     moon = MassObject(
-        EARTH_MASS*0.0123, -earth_moon, 0.0, +0.0, -1022, 0.2725*EARTH_RADIUS, color='orange'
+        EARTH_MASS*0.0123, -earth_moon, 0.0, +0.0, -1022,
+        0.2725*EARTH_RADIUS, color='orange'
     )
+    rocket = Rocket(1000, 0.0, 6400_000.0, -25_000.0, -90.0)
     # create one common vector field instance and pass this to each of the mass objects,
     # so if a method of cvf is called from any of the mass objects the result will be the same
     x_vals = np.linspace(-dimension, dimension, grid[0])
@@ -235,13 +351,34 @@ def main_moon():
     earth.animator = common_animator
     moon.animator = common_animator
     common_animator.plot_vectorfield()
+
     plt.show()
 
+def main_rocket():
+    ''' Circular velocity of space station at 400 km in orbit is 7,672 m/s
+    '''
+    dimension = 0.5 * earth_moon
+    solar_map = Map()
+    solar_map.settings(dimension, 'Earth - rocket', (10,10))
+
+    earth = MassObject(
+        EARTH_MASS, 0.0, 0.0, +0.0, +0.0, EARTH_RADIUS, color='blue')
+    rocket = Rocket(1000, 0.0, EARTH_RADIUS + 0, 10_000.0, 60.0)
+    # create one common vector field instance and pass this to each of the mass objects,
+    # so if a method of cvf is called from any of the mass objects the result will be the same
+    x_vals = np.linspace(-dimension, dimension, grid[0])
+    y_vals = np.linspace(-dimension, dimension, grid[1])
+    common_animator = Animation(x_vals, y_vals, [earth], rocket=rocket)
+    earth.animator = common_animator
+    common_animator.plot_vectorfield()
+
+    plt.show()
 
 def main_solar():
     dimension = 2 * AU
     solar_map = Map()
-    solar_map.settings(dimension, 'Solar System - Mercury, Venus, Earth (Moon), Mars', (10, 10))
+    solar_map.settings(
+        dimension, 'Solar System - Mercury, Venus, Earth (Moon), Mars', (8, 8))
     sun = MassObject(
         333_000*EARTH_MASS, 0.0, 0.0, +0.0, +0.0,
         15*109*EARTH_RADIUS, color='yellow')
@@ -277,4 +414,4 @@ def main_solar():
 
 
 if __name__ == '__main__':
-    main_solar()
+    main_rocket()
