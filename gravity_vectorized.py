@@ -25,7 +25,7 @@ buffer_radius = 10.0   # for solar system use 4.0, for moon use 13.0
 grid = (50, 50)
 grid = (0, 0) # no vector field shown
 magnification = 300  # other the planets get really small
-softening = 0.0000001 * EARTH_RADIUS
+softening = 0.1
 rocket_sprite_file = 'rocket_sprite2.png'
 degrad = np.pi / 180.0
 
@@ -146,6 +146,18 @@ class Rocket(Map):
         self.go_button.on_clicked(self.on_go)
         self.fig.canvas.mpl_connect('key_press_event', self.on_key)
 
+    def add_controls(self):
+        ax_velocitybox = self.fig.add_axes([0.20, 0.05, 0.075, 0.03])
+        self.velocitybox = TextBox(ax_velocitybox, 'Delta V:  ')
+        self.velocitybox.set_val('+0.0')
+        ax_go_button = self.fig.add_axes([0.30, 0.05, 0.05, 0.03])
+        self.go_button = Button(ax_go_button, 'GO')
+        ax_status_box = self.fig.add_axes([0.38, 0.05, 0.40, 0.03])
+        self.statusbox = TextBox(ax_status_box, '')
+        self.statusbox.set_val('velocity: 100, delta v: 20%, burn: on')
+        self._pause = False
+        self._maneuver_flag = False
+
     @property
     def mass(self):
         return self._mass
@@ -167,15 +179,17 @@ class Rocket(Map):
     def velocity(self, vel: tuple[float, float]):
         self._velocity = Point(vel[0], vel[1])
 
-    def add_controls(self):
-        ax_velocitybox = self.fig.add_axes([0.20, 0.05, 0.075, 0.03])
-        self.velocitybox = TextBox(ax_velocitybox, 'Delta V:  ')
-        self.velocitybox.set_val('+0.0')
-        ax_go_button = self.fig.add_axes([0.30, 0.05, 0.05, 0.03])
-        self.go_button = Button(ax_go_button, 'GO')
-        ax_status_box = self.fig.add_axes([0.38, 0.05, 0.40, 0.03])
-        self.statusbox = TextBox(ax_status_box, '')
-        self.statusbox.set_val('velocity: 100, delta v: 20%, burn: on')
+    @property
+    def maneuver_flag(self):
+        return self._maneuver_flag
+
+    @property
+    def pause(self):
+        return self._pause
+
+    @maneuver_flag.setter
+    def maneuver_flag(self, set: bool):
+        self._maneuver_flag = set
 
     def update_sprite(self):
         try:
@@ -201,6 +215,9 @@ class Rocket(Map):
         elif event.key == 'left':
             self.rotate(-1)
 
+        elif event.key == ' ':
+            self._pause = not self._pause
+
     def rotate(self, direction: int):
         self._alignment += 4 * direction
         self.update_sprite()
@@ -216,7 +233,8 @@ class Rocket(Map):
     def on_go(self, _):
         new_vel_x = self._velocity.x + self._velocity_delta.x
         new_vel_y = self._velocity.y + self._velocity_delta.y
-        self._velocity = Point(new_vel_x, new_vel_y)
+        self.velocity = (new_vel_x, new_vel_y)
+        self.maneuver_flag = True
         print(f'velocity: {self.velocity}')
 
 
@@ -224,6 +242,7 @@ class Animation(Map):
 
     def __init__(self, x: np.ndarray, y: np.ndarray,
                  mass_objects: list[MassObject], rocket: Rocket=None):
+        #TODO arguments for blit frequency, dt, etc
         self.mass_objects = mass_objects
         self.x = x
         self.y = y
@@ -280,6 +299,8 @@ class Animation(Map):
         t = 0
 
         while self.evolve_on:
+
+            # print time every 6 hours
             if t % 21_600 == 0:
                 print(f'time: {t/3600/24:8.1f} days              ', end='\r')
 
@@ -291,7 +312,7 @@ class Animation(Map):
             t += dt
 
             # use 20_000 for solar system, 10_000 for moon
-            if t % 1_000 == 0:
+            if t % 500 == 0:
                 self.update_status(pos, vel)
                 self.plot_vectorfield()
                 self.blit()
@@ -303,8 +324,17 @@ class Animation(Map):
             mass_object.velocity = (vel[index][0], vel[index][1])
 
         if self.rocket:
+            while self.rocket.pause:
+                self.blit()
+
+            if self.rocket.maneuver_flag:
+                vel[vel.shape[0]-1] = np.array([[self.rocket.velocity.x, self.rocket.velocity.y]])
+                self.rocket.maneuver_flag = False
+
+            else:
+                self.rocket.velocity = (vel[index+1][0], vel[index+1][1])
+
             self.rocket.location = (pos[index+1][0], pos[index+1][1])
-            self.rocket.velocity = (vel[index+1][0], vel[index+1][1])
 
     @staticmethod
     def get_acc(pos: np.ndarray, mass: np.ndarray, softening: float) -> np.ndarray:
@@ -357,7 +387,7 @@ def main_moon():
 def main_rocket():
     ''' Circular velocity of space station at 400 km in orbit is 7,672 m/s
     '''
-    dimension = 0.5 * earth_moon
+    dimension = 0.2 * earth_moon
     solar_map = Map()
     solar_map.settings(dimension, 'Earth - rocket', (10,10))
 
@@ -414,4 +444,4 @@ def main_solar():
 
 
 if __name__ == '__main__':
-    main_rocket()
+    main_solar()
