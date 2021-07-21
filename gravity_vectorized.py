@@ -136,8 +136,9 @@ class Rocket(Map):
         self._location = Point(x, y)
         self._velocity = Point(0.0, 0.0)
         self._alignment = alignment
-        self.on_delta_v(velocity)
-        self.on_go(None)
+        self._delta_v = velocity
+        self.on_delta_v(self._delta_v)
+        self.handle_delta_v()
         self.rocket = None
         self.add_controls()
         self.update_sprite()
@@ -206,7 +207,7 @@ class Rocket(Map):
         )
         self.rocket = self.ax.add_artist(rocket_im)
         vel = (self.velocity.x * self.velocity.x + self.velocity.y * self.velocity.y)**0.5
-        self.statusbox.set_val(f'velocity: {vel:,.0f}')
+        self.statusbox.set_val(f'velocity: {vel:,.0f}, alignment: {self._alignment:.0f}')
 
     def on_key(self, event):
         if event.key == 'right':
@@ -224,18 +225,31 @@ class Rocket(Map):
         self.blit()
 
     def on_delta_v(self, delta_v):
-        self._velocity_delta = Point(
-            np.sin(self._alignment*degrad) * float(delta_v),
-            np.cos(self._alignment*degrad) * float(delta_v)
-        )
-        print(f'delta v: {self._velocity_delta}')
+        self._delta_v = float(delta_v)
+        print(f'delta v set at: {self._delta_v}')
 
     def on_go(self, _):
-        new_vel_x = self._velocity.x + self._velocity_delta.x
-        new_vel_y = self._velocity.y + self._velocity_delta.y
-        self.velocity = (new_vel_x, new_vel_y)
         self.maneuver_flag = True
-        print(f'velocity: {self.velocity}')
+
+    def handle_delta_v(self):
+        if (self.velocity.y)**2 + (self.velocity.x)**2 < 0.01:
+            current_alignment = self._alignment * degrad
+
+        else:
+            current_alignment = np.arctan2(self.velocity.x, self.velocity.y)
+
+        new_vel_x = self._velocity.x + np.sin(current_alignment) * self._delta_v
+        new_vel_y = self._velocity.y + np.cos(current_alignment) * self._delta_v
+        self.velocity = (new_vel_x, new_vel_y)
+        self._alignment = (
+            current_alignment / degrad if self._delta_v >= 0
+            else (current_alignment / degrad - 180.0) % 360
+        )
+        self.maneuver_flag = False
+        print(
+            f'\nvelocity: {(self.velocity.x**2 + self.velocity.y**2)**.5:,.0f}, '
+            f'delta v: {self._delta_v:,.0f}, alignment: {self._alignment:,.0f}'
+        )
 
 
 class Animation(Map):
@@ -300,9 +314,9 @@ class Animation(Map):
 
         while self.evolve_on:
 
-            # print time every 6 hours
-            if t % 21_600 == 0:
-                print(f'time: {t/3600/24:8.1f} days              ', end='\r')
+            # print time every hour
+            if t % 3600 == 0:
+                print(f'time: {t/3600:8.1f} hours           ', end='\r')
 
             # (1/2) kick method
             vel += acc * dt * 0.5
@@ -311,30 +325,33 @@ class Animation(Map):
             vel += acc * dt * 0.5
             t += dt
 
-            # use 20_000 for solar system, 10_000 for moon
-            if t % 500 == 0:
-                self.update_status(pos, vel)
+            # use 20_000 for solar system, 10_000 for moon, 300 for rocket
+            if t % 300 == 0:
                 self.plot_vectorfield()
                 self.blit()
+                self.update_status(pos, vel)
+                vel = self.handle_rocket_maneuver(vel)
 
     def update_status(self, pos: np.ndarray, vel: np.ndarray):
-        index = 0
+        index = -1
         for index, mass_object in enumerate(self.mass_objects):
             mass_object.location = (pos[index][0], pos[index][1])
             mass_object.velocity = (vel[index][0], vel[index][1])
 
         if self.rocket:
+            self.rocket.velocity = (vel[index+1][0], vel[index+1][1])
+            self.rocket.location = (pos[index+1][0], pos[index+1][1])
+
             while self.rocket.pause:
                 self.blit()
 
-            if self.rocket.maneuver_flag:
-                vel[vel.shape[0]-1] = np.array([[self.rocket.velocity.x, self.rocket.velocity.y]])
-                self.rocket.maneuver_flag = False
+    def handle_rocket_maneuver(self, vel: np.ndarray):
+        if self.rocket and self.rocket.maneuver_flag:
+            self.rocket.handle_delta_v()
+            vel[vel.shape[0]-1] = np.array([[self.rocket.velocity.x, self.rocket.velocity.y]])
 
-            else:
-                self.rocket.velocity = (vel[index+1][0], vel[index+1][1])
+        return vel
 
-            self.rocket.location = (pos[index+1][0], pos[index+1][1])
 
     @staticmethod
     def get_acc(pos: np.ndarray, mass: np.ndarray, softening: float) -> np.ndarray:
@@ -393,7 +410,7 @@ def main_rocket():
 
     earth = MassObject(
         EARTH_MASS, 0.0, 0.0, +0.0, +0.0, EARTH_RADIUS, color='blue')
-    rocket = Rocket(1000, 0.0, EARTH_RADIUS + 0, 10_000.0, 60.0)
+    rocket = Rocket(1000, 0.0, EARTH_RADIUS + 0, 9_000.0, 50.0)
     # create one common vector field instance and pass this to each of the mass objects,
     # so if a method of cvf is called from any of the mass objects the result will be the same
     x_vals = np.linspace(-dimension, dimension, grid[0])
@@ -444,4 +461,4 @@ def main_solar():
 
 
 if __name__ == '__main__':
-    main_solar()
+    main_rocket()
