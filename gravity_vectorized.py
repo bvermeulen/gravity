@@ -137,7 +137,6 @@ class Rocket(Map):
         self._velocity = Point(0.0, 0.0)
         self._alignment = alignment
         self._delta_v = velocity
-        self.on_delta_v(self._delta_v)
         self.handle_delta_v()
         self.rocket = None
         self.add_controls()
@@ -219,6 +218,9 @@ class Rocket(Map):
         elif event.key == ' ':
             self._pause = not self._pause
 
+        elif event.key in ['v', 'V']:
+            self.on_go(event)
+
     def rotate(self, direction: int):
         self._alignment += 4 * direction
         self.update_sprite()
@@ -232,6 +234,8 @@ class Rocket(Map):
         self.maneuver_flag = True
 
     def handle_delta_v(self):
+        # if there is velocity align burn in the flight direction of the rocket
+        # otherwise keep current alignment of thet rocket
         if (self.velocity.y)**2 + (self.velocity.x)**2 < 0.01:
             current_alignment = self._alignment * degrad
 
@@ -241,10 +245,14 @@ class Rocket(Map):
         new_vel_x = self._velocity.x + np.sin(current_alignment) * self._delta_v
         new_vel_y = self._velocity.y + np.cos(current_alignment) * self._delta_v
         self.velocity = (new_vel_x, new_vel_y)
+
+        # set the alignment of the rocket in the burn direction
         self._alignment = (
             current_alignment / degrad if self._delta_v >= 0
             else (current_alignment / degrad - 180.0) % 360
         )
+
+        # maneuver has been completed
         self.maneuver_flag = False
         print(
             f'\nvelocity: {(self.velocity.x**2 + self.velocity.y**2)**.5:,.0f}, '
@@ -416,7 +424,7 @@ def main_rocket():
     x_vals = np.linspace(-dimension, dimension, grid[0])
     y_vals = np.linspace(-dimension, dimension, grid[1])
     common_animator = Animation(x_vals, y_vals, [earth], rocket=rocket)
-    earth.animator = common_animator
+    # earth.animator = common_animator
     common_animator.plot_vectorfield()
 
     plt.show()
