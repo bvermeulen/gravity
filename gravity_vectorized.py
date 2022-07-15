@@ -1,4 +1,6 @@
-# gravity
+''' vectorised versions of gravity equitation with mass bodies and
+    a rocket
+'''
 from __future__ import annotations
 import numpy as np
 from astropy import constants
