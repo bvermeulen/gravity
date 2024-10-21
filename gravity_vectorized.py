@@ -477,4 +477,4 @@ def main_solar():
 
 
 if __name__ == '__main__':
-    main_solar()
+    main_rocket()
