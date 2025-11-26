@@ -1,10 +1,6 @@
-<<<<<<< HEAD
-# gravity
-=======
 ''' vectorised versions of gravity equitation with mass bodies and
     a rocket
 '''
->>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
 from __future__ import annotations
 import numpy as np
 from astropy import constants
@@ -27,17 +23,10 @@ EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
 AU = constants.au.value
 earth_moon = 384_399_000
-<<<<<<< HEAD
-buffer_radius = 10.0   # for solar system use 4.0, for moon use 13.0
-grid = (50, 50)
-grid = (0, 0) # no vector field shown
-magnification = 300  # other the planets get really small
-=======
 buffer_radius = 13.0   # for solar system use 4.0, for moon use 13.0
 grid = (0, 0)   # (0, 0): no vector field shown
 # grid = (50, 50)
 magnification = 300  # otherwise the planets get really small
->>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
 softening = 0.1
 rocket_sprite_file = 'rocket_sprite2.png'
 degrad = np.pi / 180.0
@@ -54,12 +43,7 @@ class Map:
         cls.ax.set_ylim(-1.1*dimension, 1.1*dimension)
         cls.fig.suptitle(title)
 
-<<<<<<< HEAD
-    @classmethod
-    @timed(logger)
-=======
     # @timed(logger)
->>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
     def blit(cls):
         cls.fig.canvas.draw()
         cls.fig.canvas.flush_events()
@@ -279,16 +263,10 @@ class Rocket(Map):
 
 class Animation(Map):
 
-<<<<<<< HEAD
-    def __init__(self, x: np.ndarray, y: np.ndarray,
-                 mass_objects: list[MassObject], rocket: Rocket=None):
-        #TODO arguments for blit frequency, dt, etc
-=======
     def __init__(
             self, x: np.ndarray, y: np.ndarray, mass_objects: list[MassObject],
             rocket: Rocket=None, dt=1, plt_int_hour=1
         ) -> None:
->>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
         self.mass_objects = mass_objects
         self.x = x
         self.y = y
@@ -296,11 +274,8 @@ class Animation(Map):
         self.evolve_on = False
         self.field: mpl.Axes.axes = None
         self.rocket = rocket
-<<<<<<< HEAD
-=======
         self.dt = dt
         self.plt_int_seconds = int(plt_int_hour * 3600)
->>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
 
     # @timed(logger)
     def plot_vectorfield(self) -> None:
@@ -502,4 +477,4 @@ def main_solar():
 
 
 if __name__ == '__main__':
-    main_rocket()
+    main_moon()
