@@ -317,7 +317,7 @@ class Animation(Map):
             mass = np.append(mass, [[self.rocket.mass]], axis=0)
 
         acc = self.get_acc(pos, mass, softening)
-        dt = 1
+        dt = 60
         t = 0
 
         while self.evolve_on:
@@ -334,7 +334,7 @@ class Animation(Map):
             t += dt
 
             # use 20_000 for solar system, 10_000 for moon, 300 for rocket
-            if t % 300 == 0:
+            if t % 20_000 == 0:
                 self.plot_vectorfield()
                 self.blit()
                 self.update_status(pos, vel)
@@ -397,7 +397,7 @@ def main_moon():
         EARTH_MASS*0.0123, -earth_moon, 0.0, +0.0, -1022,
         0.2725*EARTH_RADIUS, color='orange'
     )
-    rocket = Rocket(1000, 0.0, 6400_000.0, -25_000.0, -90.0)
+    #rocket = Rocket(1000, 0.0, 6400_000.0, -25_000.0, -90.0)
     # create one common vector field instance and pass this to each of the mass objects,
     # so if a method of cvf is called from any of the mass objects the result will be the same
     x_vals = np.linspace(-dimension, dimension, grid[0])
@@ -469,4 +469,4 @@ def main_solar():
 
 
 if __name__ == '__main__':
-    main_rocket()
+    main_solar()

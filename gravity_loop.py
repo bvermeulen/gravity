@@ -19,7 +19,6 @@ buffer_radius = 10.0
 grid = (75, 75)
 
 
-
 class Map:
     @classmethod
     def settings(cls, dimension, figsize):
@@ -32,7 +31,6 @@ class Map:
     def blip(cls):
         cls.fig.canvas.draw()
         cls.fig.canvas.flush_events()
-
 
 
 class MassObject(Map):
@@ -60,6 +58,8 @@ class MassObject(Map):
 
         self.location = Point(event.xdata, event.ydata)
         self.body.center = (self.location.x, self.location.y)
+        self.cvf.field.remove()
+        self.cvf.plot_vectorfield()
         self.blip()
 
     def on_release(self, event):
