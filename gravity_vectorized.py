@@ -1,4 +1,10 @@
+<<<<<<< HEAD
 # gravity
+=======
+''' vectorised versions of gravity equitation with mass bodies and
+    a rocket
+'''
+>>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
 from __future__ import annotations
 import numpy as np
 from astropy import constants
@@ -21,10 +27,17 @@ EARTH_RADIUS = constants.R_earth.value
 EARTH_MASS = constants.M_earth.value
 AU = constants.au.value
 earth_moon = 384_399_000
+<<<<<<< HEAD
 buffer_radius = 10.0   # for solar system use 4.0, for moon use 13.0
 grid = (50, 50)
 grid = (0, 0) # no vector field shown
 magnification = 300  # other the planets get really small
+=======
+buffer_radius = 13.0   # for solar system use 4.0, for moon use 13.0
+grid = (0, 0)   # (0, 0): no vector field shown
+# grid = (50, 50)
+magnification = 300  # otherwise the planets get really small
+>>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
 softening = 0.1
 rocket_sprite_file = 'rocket_sprite2.png'
 degrad = np.pi / 180.0
@@ -41,8 +54,12 @@ class Map:
         cls.ax.set_ylim(-1.1*dimension, 1.1*dimension)
         cls.fig.suptitle(title)
 
+<<<<<<< HEAD
     @classmethod
     @timed(logger)
+=======
+    # @timed(logger)
+>>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
     def blit(cls):
         cls.fig.canvas.draw()
         cls.fig.canvas.flush_events()
@@ -262,9 +279,16 @@ class Rocket(Map):
 
 class Animation(Map):
 
+<<<<<<< HEAD
     def __init__(self, x: np.ndarray, y: np.ndarray,
                  mass_objects: list[MassObject], rocket: Rocket=None):
         #TODO arguments for blit frequency, dt, etc
+=======
+    def __init__(
+            self, x: np.ndarray, y: np.ndarray, mass_objects: list[MassObject],
+            rocket: Rocket=None, dt=1, plt_int_hour=1
+        ) -> None:
+>>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
         self.mass_objects = mass_objects
         self.x = x
         self.y = y
@@ -272,6 +296,11 @@ class Animation(Map):
         self.evolve_on = False
         self.field: mpl.Axes.axes = None
         self.rocket = rocket
+<<<<<<< HEAD
+=======
+        self.dt = dt
+        self.plt_int_seconds = int(plt_int_hour * 3600)
+>>>>>>> fadee759985177266beffa269f52b1dbe8232aa3
 
     # @timed(logger)
     def plot_vectorfield(self) -> None:
@@ -317,28 +346,23 @@ class Animation(Map):
             mass = np.append(mass, [[self.rocket.mass]], axis=0)
 
         acc = self.get_acc(pos, mass, softening)
-        dt = 60
-        t = 0
 
+        t = 0
         while self.evolve_on:
 
-            # print time every hour
-            if t % 3600 == 0:
-                print(f'time: {t/3600:8.1f} hours           ', end='\r')
-
             # (1/2) kick method
-            vel += acc * dt * 0.5
-            pos += vel * dt
+            vel += acc * self.dt * 0.5
+            pos += vel * self.dt
             acc = self.get_acc(pos, mass, softening)
-            vel += acc * dt * 0.5
-            t += dt
+            vel += acc * self.dt * 0.5
+            t += self.dt
 
-            # use 20_000 for solar system, 10_000 for moon, 300 for rocket
-            if t % 20_000 == 0:
+            if t % self.plt_int_seconds == 0:
                 self.plot_vectorfield()
-                self.blit()
                 self.update_status(pos, vel)
                 vel = self.handle_rocket_maneuver(vel)
+                self.blit()
+                print(f'time: {t/3600:8.1f} hours           ', end='\r')
 
     def update_status(self, pos: np.ndarray, vel: np.ndarray):
         index = -1
@@ -359,7 +383,6 @@ class Animation(Map):
             vel[vel.shape[0]-1] = np.array([[self.rocket.velocity.x, self.rocket.velocity.y]])
 
         return vel
-
 
     @staticmethod
     def get_acc(pos: np.ndarray, mass: np.ndarray, softening: float) -> np.ndarray:
@@ -397,17 +420,21 @@ def main_moon():
         EARTH_MASS*0.0123, -earth_moon, 0.0, +0.0, -1022,
         0.2725*EARTH_RADIUS, color='orange'
     )
-    #rocket = Rocket(1000, 0.0, 6400_000.0, -25_000.0, -90.0)
+    # rocket = Rocket(1000, 0.0, 6400_000.0, -7_000.0, -90.0)\
+    rocket = None
     # create one common vector field instance and pass this to each of the mass objects,
     # so if a method of cvf is called from any of the mass objects the result will be the same
     x_vals = np.linspace(-dimension, dimension, grid[0])
     y_vals = np.linspace(-dimension, dimension, grid[1])
-    common_animator = Animation(x_vals, y_vals, [earth, moon])
+    common_animator = Animation(
+        x_vals, y_vals, [earth, moon], rocket=rocket,
+        dt=1, plt_int_hour=0.25
+    )
     earth.animator = common_animator
     moon.animator = common_animator
     common_animator.plot_vectorfield()
-
     plt.show()
+
 
 def main_rocket():
     ''' Circular velocity of space station at 400 km in orbit is 7,672 m/s
@@ -423,11 +450,14 @@ def main_rocket():
     # so if a method of cvf is called from any of the mass objects the result will be the same
     x_vals = np.linspace(-dimension, dimension, grid[0])
     y_vals = np.linspace(-dimension, dimension, grid[1])
-    common_animator = Animation(x_vals, y_vals, [earth], rocket=rocket)
+    common_animator = Animation(
+        x_vals, y_vals, [earth], rocket=rocket,
+        dt=1, plt_int_hour = 0.1
+    )
     # earth.animator = common_animator
     common_animator.plot_vectorfield()
-
     plt.show()
+
 
 def main_solar():
     dimension = 2 * AU
@@ -457,7 +487,10 @@ def main_solar():
     # so if a method of cvf is called from any of the mass objects the result will be the same
     x_vals = np.linspace(-dimension, dimension, grid[0])
     y_vals = np.linspace(-dimension, dimension, grid[1])
-    common_animator = Animation(x_vals, y_vals, [sun, mercury, venus, earth, moon, mars])
+    common_animator = Animation(
+        x_vals, y_vals, [sun, mercury, venus, earth, moon, mars],
+        dt=60, plt_int_hour=24
+    )
     sun.animator = common_animator
     mercury.animator = common_animator
     venus.animator = common_animator
@@ -469,4 +502,4 @@ def main_solar():
 
 
 if __name__ == '__main__':
-    main_solar()
+    main_rocket()

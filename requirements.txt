@@ -1,0 +1,14 @@
+astropy
+cycler
+fonttools
+kiwisolver
+matplotlib
+numpy
+packaging
+Pillow
+pyerfa
+pyparsing
+python-dateutil
+PyYAML
+Shapely
+six
