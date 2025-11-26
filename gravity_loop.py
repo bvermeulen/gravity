@@ -58,6 +58,8 @@ class MassObject(Map):
 
         self.location = Point(event.xdata, event.ydata)
         self.body.center = (self.location.x, self.location.y)
+        self.cvf.field.remove()
+        self.cvf.plot_vectorfield()
         self.blip()
 
     def on_release(self, event):
