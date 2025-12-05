@@ -542,5 +542,5 @@ def main_solar():
     plt.show()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main_solar()
